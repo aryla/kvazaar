@@ -290,7 +290,7 @@ typedef struct {
    * search. It might be more efficient to recalculate the final coefficients
    * once we know the final modes rather than copying them.
    */
-  lcu_coeff_t coeff; //!< LCU coefficients
+  lcu_coeff_t *coeff; //!< LCU coefficients
 
   /**
    * A 17x17 CU array, plus the top right reference CU.
