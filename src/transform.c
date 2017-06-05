@@ -320,17 +320,17 @@ static void quantize_tr_residual(encoder_state_t * const state,
   switch (color) {
     case COLOR_Y:
       pred  = &lcu->rec.y[offset];
-      ref   = &lcu->ref.y[offset];
+      ref   = &lcu->ref->y[offset];
       coeff = &lcu->coeff.y[z_index];
       break;
     case COLOR_U:
       pred = &lcu->rec.u[offset];
-      ref  = &lcu->ref.u[offset];
+      ref  = &lcu->ref->u[offset];
       coeff = &lcu->coeff.u[z_index];
       break;
     case COLOR_V:
       pred = &lcu->rec.v[offset];
-      ref  = &lcu->ref.v[offset];
+      ref  = &lcu->ref->v[offset];
       coeff = &lcu->coeff.v[z_index];
       break;
   }

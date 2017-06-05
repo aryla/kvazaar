@@ -279,10 +279,12 @@ typedef struct {
 
 
 typedef struct {
-  lcu_ref_px_t top_ref;  //!< Reference pixels from adjacent LCUs.
-  lcu_ref_px_t left_ref; //!< Reference pixels from adjacent LCUs.
-  lcu_yuv_t ref; //!< LCU reference pixels
+  const lcu_ref_px_t *top_ref;  //!< Reference pixels from adjacent LCUs.
+  const lcu_ref_px_t *left_ref; //!< Reference pixels from adjacent LCUs.
+  const lcu_yuv_t *ref;         //!< LCU reference pixels
+
   lcu_yuv_t rec; //!< LCU reconstructed pixels
+
   /**
    * We get the coefficients as a byproduct of doing reconstruction during the
    * search. It might be more efficient to recalculate the final coefficients

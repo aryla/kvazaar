@@ -402,7 +402,7 @@ static void search_intra_chroma_rough(encoder_state_t * const state,
  * \return  Number of prediction modes in param modes.
  */
 static int8_t search_intra_rough(encoder_state_t * const state, 
-                                 kvz_pixel *orig, int32_t origstride,
+                                 const kvz_pixel *orig, int32_t origstride,
                                  kvz_intra_references *refs,
                                  int log2_width, int8_t *intra_preds,
                                  int8_t modes[35], double costs[35])
@@ -572,7 +572,7 @@ static int8_t search_intra_rough(encoder_state_t * const state,
  */
 static int8_t search_intra_rdo(encoder_state_t * const state, 
                              int x_px, int y_px, int depth,
-                             kvz_pixel *orig, int32_t origstride,
+                             const kvz_pixel *orig, int32_t origstride,
                              int8_t *intra_preds,
                              int modes_to_check,
                              int8_t modes[35], double costs[35],
@@ -765,8 +765,8 @@ int8_t kvz_search_cu_intra_chroma(encoder_state_t * const state,
     kvz_intra_build_reference(log2_width_c, COLOR_V, &luma_px, &pic_px, lcu, &refs_v);
 
     vector2d_t lcu_cpx = { lcu_px.x / 2, lcu_px.y / 2 };
-    kvz_pixel *ref_u = &lcu->ref.u[lcu_cpx.x + lcu_cpx.y * LCU_WIDTH_C];
-    kvz_pixel *ref_v = &lcu->ref.v[lcu_cpx.x + lcu_cpx.y * LCU_WIDTH_C];
+    const kvz_pixel *ref_u = &lcu->ref->u[lcu_cpx.x + lcu_cpx.y * LCU_WIDTH_C];
+    const kvz_pixel *ref_v = &lcu->ref->v[lcu_cpx.x + lcu_cpx.y * LCU_WIDTH_C];
 
     search_intra_chroma_rough(state, x_px, y_px, depth,
                               ref_u, ref_v, LCU_WIDTH_C,
@@ -825,7 +825,7 @@ void kvz_search_cu_intra(encoder_state_t * const state,
   double costs[35];
 
   // Find best intra mode for 2Nx2N.
-  kvz_pixel *ref_pixels = &lcu->ref.y[lcu_px.x + lcu_px.y * LCU_WIDTH];
+  const kvz_pixel *ref_pixels = &lcu->ref->y[lcu_px.x + lcu_px.y * LCU_WIDTH];
 
   int8_t number_of_modes;
   bool skip_rough_search = (depth == 0 || state->encoder_control->cfg.rdo >= 3);

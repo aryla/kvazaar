@@ -255,7 +255,7 @@ double kvz_cu_rd_cost_luma(const encoder_state_t *const state,
   int ssd = 0;
   if (!state->encoder_control->cfg.lossless) {
     int index = y_px * LCU_WIDTH + x_px;
-    ssd = kvz_pixels_calc_ssd(&lcu->ref.y[index], &lcu->rec.y[index],
+    ssd = kvz_pixels_calc_ssd(&lcu->ref->y[index], &lcu->rec.y[index],
                                         LCU_WIDTH,          LCU_WIDTH,
                                         width);
   }
@@ -321,10 +321,10 @@ double kvz_cu_rd_cost_chroma(const encoder_state_t *const state,
   int ssd = 0;
   if (!state->encoder_control->cfg.lossless) {
     int index = lcu_px.y * LCU_WIDTH_C + lcu_px.x;
-    int ssd_u = kvz_pixels_calc_ssd(&lcu->ref.u[index], &lcu->rec.u[index],
+    int ssd_u = kvz_pixels_calc_ssd(&lcu->ref->u[index], &lcu->rec.u[index],
                                     LCU_WIDTH_C,         LCU_WIDTH_C,
                                     width);
-    int ssd_v = kvz_pixels_calc_ssd(&lcu->ref.v[index], &lcu->rec.v[index],
+    int ssd_v = kvz_pixels_calc_ssd(&lcu->ref->v[index], &lcu->rec.v[index],
                                     LCU_WIDTH_C,        LCU_WIDTH_C,
                                     width);
     ssd = ssd_u + ssd_v;
@@ -731,22 +731,82 @@ static double search_cu(encoder_state_t * const state, int x, int y, int depth, 
 }
 
 
+static void init_ref_pixels(const encoder_state_t* state,
+                            int x, int y,
+                            const yuv_t *hor_buf,
+                            const yuv_t *ver_buf,
+                            lcu_yuv_t *ref,
+                            lcu_ref_px_t *top_ref,
+                            lcu_ref_px_t *left_ref)
+{
+  const videoframe_t * const frame = state->tile->frame;
+
+  ref->chroma_format = state->encoder_control->chroma_format;
+
+  // Copy top reference pixels.
+  if (y > 0) {
+    // hor_buf is of size frame->width so there might not be
+    // LCU_REF_PX_WIDTH number of allocated pixels left.
+    int x_max = MIN(LCU_REF_PX_WIDTH, frame->width- x);
+    int x_min_in_lcu = (x > 0) ? 0 : 1;
+    int luma_offset = OFFSET_HOR_BUF(x, y, frame, x_min_in_lcu - 1);
+    int chroma_offset = OFFSET_HOR_BUF_C(x, y, frame, x_min_in_lcu - 1);
+    int luma_bytes = (x_max + (1 - x_min_in_lcu)) * sizeof(kvz_pixel);
+    int chroma_bytes = (x_max / 2 + (1 - x_min_in_lcu)) * sizeof(kvz_pixel);
+
+    memcpy(&top_ref->y[x_min_in_lcu], &hor_buf->y[luma_offset], luma_bytes);
+    if (state->encoder_control->chroma_format != KVZ_CSP_400) {
+      memcpy(&top_ref->u[x_min_in_lcu], &hor_buf->u[chroma_offset], chroma_bytes);
+      memcpy(&top_ref->v[x_min_in_lcu], &hor_buf->v[chroma_offset], chroma_bytes);
+    }
+  }
+
+  // Copy left reference pixels.
+  if (x > 0) {
+    int y_min_in_lcu = (y > 0) ? 0 : 1;
+    int luma_offset = OFFSET_VER_BUF(x, y, frame, y_min_in_lcu - 1);
+    int chroma_offset = OFFSET_VER_BUF_C(x, y, frame, y_min_in_lcu - 1);
+    int luma_bytes = (LCU_WIDTH + (1 - y_min_in_lcu)) * sizeof(kvz_pixel);
+    int chroma_bytes = (LCU_WIDTH / 2 + (1 - y_min_in_lcu)) * sizeof(kvz_pixel);
+
+    memcpy(&left_ref->y[y_min_in_lcu], &ver_buf->y[luma_offset], luma_bytes);
+    if (state->encoder_control->chroma_format != KVZ_CSP_400) {
+      memcpy(&left_ref->u[y_min_in_lcu], &ver_buf->u[chroma_offset], chroma_bytes);
+      memcpy(&left_ref->v[y_min_in_lcu], &ver_buf->v[chroma_offset], chroma_bytes);
+    }
+  }
+
+  // Copy rest of the reference pixels.
+  int x_max = MIN(x + LCU_WIDTH, frame->width) - x;
+  int y_max = MIN(y + LCU_WIDTH, frame->height) - y;
+
+  int x_c = x / 2;
+  int y_c = y / 2;
+  int x_max_c = x_max / 2;
+  int y_max_c = y_max / 2;
+
+  kvz_pixels_blit(&frame->source->y[x + y * frame->source->stride], ref->y,
+                  x_max, y_max, frame->source->stride, LCU_WIDTH);
+  if (state->encoder_control->chroma_format != KVZ_CSP_400) {
+    kvz_pixels_blit(&frame->source->u[x_c + y_c * frame->source->stride / 2], ref->u,
+                    x_max_c, y_max_c, frame->source->stride / 2, LCU_WIDTH / 2);
+    kvz_pixels_blit(&frame->source->v[x_c + y_c * frame->source->stride / 2], ref->v,
+                    x_max_c, y_max_c, frame->source->stride / 2, LCU_WIDTH / 2);
+  }
+}
+
+
 /**
- * Initialize lcu_t for search.
- * - Copy reference CUs.
- * - Copy reference pixels from neighbouring LCUs.
- * - Copy reference pixels from this LCU.
+ * \brief Copy reference CUs to LCU.
  */
-static void init_lcu_t(const encoder_state_t * const state, const int x, const int y, lcu_t *lcu, const yuv_t *hor_buf, const yuv_t *ver_buf)
+static void init_ref_cus(const encoder_state_t * const state,
+                         const int x,
+                         const int y,
+                         lcu_t *lcu)
 {
   const videoframe_t * const frame = state->tile->frame;
 
   FILL(*lcu, 0);
-  
-  lcu->rec.chroma_format = state->encoder_control->chroma_format;
-  lcu->ref.chroma_format = state->encoder_control->chroma_format;
-
-  // Copy reference cu_info structs from neighbouring LCUs.
 
   // Copy top CU row.
   if (y > 0) {
@@ -776,63 +836,6 @@ static void init_lcu_t(const encoder_state_t * const state, const int x, const i
     const cu_info_t *from_cu = kvz_cu_array_at_const(frame->cu_array, x + LCU_WIDTH, y - 1);
     cu_info_t *to_cu = LCU_GET_TOP_RIGHT_CU(lcu);
     memcpy(to_cu, from_cu, sizeof(*to_cu));
-  }
-
-  // Copy reference pixels.
-  {
-    const int pic_width = frame->width;
-    // Copy top reference pixels.
-    if (y > 0) {
-      // hor_buf is of size pic_width so there might not be LCU_REF_PX_WIDTH
-      // number of allocated pixels left.
-      int x_max = MIN(LCU_REF_PX_WIDTH, pic_width - x);
-      int x_min_in_lcu = (x>0) ? 0 : 1;
-      int luma_offset = OFFSET_HOR_BUF(x, y, frame, x_min_in_lcu - 1);
-      int chroma_offset = OFFSET_HOR_BUF_C(x, y, frame, x_min_in_lcu - 1);
-      int luma_bytes = (x_max + (1 - x_min_in_lcu))*sizeof(kvz_pixel);
-      int chroma_bytes = (x_max / 2 + (1 - x_min_in_lcu))*sizeof(kvz_pixel);
-
-      memcpy(&lcu->top_ref.y[x_min_in_lcu], &hor_buf->y[luma_offset], luma_bytes);
-      if (state->encoder_control->chroma_format != KVZ_CSP_400) {
-        memcpy(&lcu->top_ref.u[x_min_in_lcu], &hor_buf->u[chroma_offset], chroma_bytes);
-        memcpy(&lcu->top_ref.v[x_min_in_lcu], &hor_buf->v[chroma_offset], chroma_bytes);
-      }
-    }
-    // Copy left reference pixels.
-    if (x > 0) {
-      int y_min_in_lcu = (y>0) ? 0 : 1;
-      int luma_offset = OFFSET_VER_BUF(x, y, frame, y_min_in_lcu - 1);
-      int chroma_offset = OFFSET_VER_BUF_C(x, y, frame, y_min_in_lcu - 1);
-      int luma_bytes = (LCU_WIDTH + (1 - y_min_in_lcu)) * sizeof(kvz_pixel);
-      int chroma_bytes = (LCU_WIDTH / 2 + (1 - y_min_in_lcu)) * sizeof(kvz_pixel);
-
-      memcpy(&lcu->left_ref.y[y_min_in_lcu], &ver_buf->y[luma_offset], luma_bytes);
-      if (state->encoder_control->chroma_format != KVZ_CSP_400) {
-        memcpy(&lcu->left_ref.u[y_min_in_lcu], &ver_buf->u[chroma_offset], chroma_bytes);
-        memcpy(&lcu->left_ref.v[y_min_in_lcu], &ver_buf->v[chroma_offset], chroma_bytes);
-      }
-    }
-  }
-
-  // Copy LCU pixels.
-  {
-    const videoframe_t * const frame = state->tile->frame;
-    int x_max = MIN(x + LCU_WIDTH, frame->width) - x;
-    int y_max = MIN(y + LCU_WIDTH, frame->height) - y;
-
-    int x_c = x / 2;
-    int y_c = y / 2;
-    int x_max_c = x_max / 2;
-    int y_max_c = y_max / 2;
-
-    kvz_pixels_blit(&frame->source->y[x + y * frame->source->stride], lcu->ref.y,
-                        x_max, y_max, frame->source->stride, LCU_WIDTH);
-    if (state->encoder_control->chroma_format != KVZ_CSP_400) {
-      kvz_pixels_blit(&frame->source->u[x_c + y_c * frame->source->stride / 2], lcu->ref.u,
-                      x_max_c, y_max_c, frame->source->stride / 2, LCU_WIDTH / 2);
-      kvz_pixels_blit(&frame->source->v[x_c + y_c * frame->source->stride / 2], lcu->ref.v,
-                      x_max_c, y_max_c, frame->source->stride / 2, LCU_WIDTH / 2);
-    }
   }
 }
 
@@ -869,17 +872,33 @@ static void copy_lcu_to_cu_data(const encoder_state_t * const state, int x_px, i
  * Search LCU for modes.
  * - Best mode gets copied to current picture.
  */
-void kvz_search_lcu(encoder_state_t * const state, const int x, const int y, const yuv_t * const hor_buf, const yuv_t * const ver_buf)
+void kvz_search_lcu(encoder_state_t * const state,
+                    const int x,
+                    const int y,
+                    const yuv_t * const hor_buf,
+                    const yuv_t * const ver_buf)
 {
   assert(x % LCU_WIDTH == 0);
   assert(y % LCU_WIDTH == 0);
+
+  // Initialize reference pixels.
+  lcu_yuv_t ref;
+  lcu_ref_px_t top_ref;
+  lcu_ref_px_t left_ref;
+  init_ref_pixels(state, x, y, hor_buf, ver_buf, &ref, &top_ref, &left_ref);
 
   // Initialize the same starting state to every depth. The search process
   // will use these as temporary storage for predictions before making
   // a decision on which to use, and they get updated during the search
   // process.
   lcu_t work_tree[MAX_PU_DEPTH + 1];
-  init_lcu_t(state, x, y, &work_tree[0], hor_buf, ver_buf);
+  init_ref_cus(state, x, y, &work_tree[0]);
+
+  work_tree[0].ref = &ref;
+  work_tree[0].top_ref = &top_ref;
+  work_tree[0].left_ref = &left_ref;
+  work_tree[0].rec.chroma_format = ref.chroma_format;
+
   for (int depth = 1; depth <= MAX_PU_DEPTH; ++depth) {
     work_tree[depth] = work_tree[0];
   }

@@ -360,8 +360,8 @@ void kvz_intra_build_reference_any(
   };
 
   // Init pointers to LCUs reconstruction buffers, such that index 0 refers to block coordinate 0.
-  const kvz_pixel *left_ref = !color ? &lcu->left_ref.y[1] : (color == 1) ? &lcu->left_ref.u[1] : &lcu->left_ref.v[1];
-  const kvz_pixel *top_ref = !color ? &lcu->top_ref.y[1] : (color == 1) ? &lcu->top_ref.u[1] : &lcu->top_ref.v[1];
+  const kvz_pixel *left_ref = !color ? &lcu->left_ref->y[1] : (color == 1) ? &lcu->left_ref->u[1] : &lcu->left_ref->v[1];
+  const kvz_pixel *top_ref = !color ? &lcu->top_ref->y[1] : (color == 1) ? &lcu->top_ref->u[1] : &lcu->top_ref->v[1];
   const kvz_pixel *rec_ref = !color ? lcu->rec.y : (color == 1) ? lcu->rec.u : lcu->rec.v;
 
   // Init top borders pointer to point to the correct place in the correct reference array.
@@ -483,8 +483,8 @@ void kvz_intra_build_reference_inner(
   };
 
   // Init pointers to LCUs reconstruction buffers, such that index 0 refers to block coordinate 0.
-  const kvz_pixel * __restrict left_ref = !color ? &lcu->left_ref.y[1] : (color == 1) ? &lcu->left_ref.u[1] : &lcu->left_ref.v[1];
-  const kvz_pixel * __restrict top_ref = !color ? &lcu->top_ref.y[1] : (color == 1) ? &lcu->top_ref.u[1] : &lcu->top_ref.v[1];
+  const kvz_pixel * __restrict left_ref = !color ? &lcu->left_ref->y[1] : (color == 1) ? &lcu->left_ref->u[1] : &lcu->left_ref->v[1];
+  const kvz_pixel * __restrict top_ref = !color ? &lcu->top_ref->y[1] : (color == 1) ? &lcu->top_ref->u[1] : &lcu->top_ref->v[1];
   const kvz_pixel * __restrict rec_ref = !color ? lcu->rec.y : (color == 1) ? lcu->rec.u : lcu->rec.v;
 
   // Init top borders pointer to point to the correct place in the correct reference array.
