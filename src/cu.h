@@ -338,7 +338,8 @@ typedef struct {
 
 } lcu_t;
 
-cu_info_t *kvz_alloc_lcu_cu(lcu_t *lcu, int log_scu_width);
+cu_info_t *kvz_lcu_alloc_cu(lcu_t *lcu, int log_scu_width);
+void kvz_lcu_free_cu(lcu_t *lcu);
 
 void kvz_cu_array_copy_from_lcu(cu_array_t* dst, int dst_x, int dst_y, const lcu_t *src);
 

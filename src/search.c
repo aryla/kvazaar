@@ -807,50 +807,59 @@ static void init_ref_pixels(const encoder_state_t* state,
 
 
 /**
- * \brief Copy reference CUs to LCU.
+ * \brief Copy reference CUs from frame CU array to LCU.
  */
-static void init_ref_cus(const encoder_state_t * const state,
+static void init_ref_cus(const cu_array_t * const cu_array,
                          const int x,
                          const int y,
                          lcu_t *lcu)
 {
-  const videoframe_t * const frame = state->tile->frame;
-
-  FILL(*lcu, 0);
-
-  kvz_alloc_lcu_cu(lcu, state->encoder_control->log_scu_width);
-
-  // Copy reference cu_info structs from neighbouring LCUs.
-
   // Copy top CU row.
   if (y > 0) {
     for (int i = 0; i < LCU_WIDTH; i += lcu->scu_width) {
-      const cu_info_t *from_cu = kvz_cu_array_at_const(frame->cu_array, x + i, y - 1);
-      cu_info_t *to_cu = LCU_GET_CU_AT_PX(lcu, i, -1);
-      memcpy(to_cu, from_cu, sizeof(*to_cu));
+      *LCU_GET_CU_AT_PX(lcu, i, -1) =
+        *kvz_cu_array_at_const(cu_array, x + i, y - 1);
     }
   }
   // Copy left CU column.
   if (x > 0) {
     for (int i = 0; i < LCU_WIDTH; i += lcu->scu_width) {
-      const cu_info_t *from_cu = kvz_cu_array_at_const(frame->cu_array, x - 1, y + i);
-      cu_info_t *to_cu = LCU_GET_CU_AT_PX(lcu, -1, i);
-      memcpy(to_cu, from_cu, sizeof(*to_cu));
+      *LCU_GET_CU_AT_PX(lcu, -1, i) =
+        *kvz_cu_array_at_const(cu_array, x - 1, y + i);
     }
   }
   // Copy top-left CU.
   if (x > 0 && y > 0) {
-    const cu_info_t *from_cu = kvz_cu_array_at_const(frame->cu_array, x - 1, y - 1);
-    cu_info_t *to_cu = LCU_GET_CU_AT_PX(lcu, -1, -1);
-    memcpy(to_cu, from_cu, sizeof(*to_cu));
+    *LCU_GET_CU_AT_PX(lcu, -1, -1) =
+      *kvz_cu_array_at_const(cu_array, x - 1, y - 1);
   }
 
   // Copy top-right CU.
-  if (y > 0 && x + LCU_WIDTH < frame->width) {
-    const cu_info_t *from_cu = kvz_cu_array_at_const(frame->cu_array, x + LCU_WIDTH, y - 1);
-    cu_info_t *to_cu = LCU_GET_TOP_RIGHT_CU(lcu);
-    memcpy(to_cu, from_cu, sizeof(*to_cu));
+  if (y > 0 && x + LCU_WIDTH < cu_array->width) {
+    *LCU_GET_TOP_RIGHT_CU(lcu) =
+      *kvz_cu_array_at_const(cu_array, x + LCU_WIDTH, y - 1);
   }
+}
+
+
+/**
+ * \brief Copy reference CUs to another LCU.
+ */
+static void copy_ref_cus(const lcu_t *from, lcu_t *to)
+{
+  for (int i = 0; i < LCU_WIDTH; i += to->scu_width) {
+    // Copy top CU row.
+    *LCU_GET_CU_AT_PX(to, i, -1) = *LCU_GET_CU_AT_PX(from, i, -1);
+
+    // Copy left CU column.
+    *LCU_GET_CU_AT_PX(to, -1, i) = *LCU_GET_CU_AT_PX(from, -1, i);
+  }
+
+  // Copy top-left CU.
+  *LCU_GET_CU_AT_PX(to, -1, -1) = *LCU_GET_CU_AT_PX(from, -1, -1);
+
+  // Copy top-right CU.
+  *LCU_GET_TOP_RIGHT_CU(to) = *LCU_GET_TOP_RIGHT_CU(from);
 }
 
 
@@ -907,44 +916,22 @@ void kvz_search_lcu(encoder_state_t * const state,
   // process.
   lcu_t work_tree[MAX_PU_DEPTH + 1];
   lcu_coeff_t coeff[MAX_PU_DEPTH];
-  init_ref_cus(state, x, y, &work_tree[0]);
 
+  // At depth zero, write directly to coeffs in encoder state.
   work_tree[0].coeff = state->coeff;
   work_tree[0].ref = &ref;
   work_tree[0].top_ref = &top_ref;
   work_tree[0].left_ref = &left_ref;
   work_tree[0].rec.chroma_format = ref.chroma_format;
 
+  kvz_lcu_alloc_cu(&work_tree[0], state->encoder_control->log_scu_width);
+  init_ref_cus(state->tile->frame->cu_array, x, y, &work_tree[0]);
+
   for (int depth = 1; depth <= MAX_PU_DEPTH; ++depth) {
     work_tree[depth] = work_tree[0];
     work_tree[depth].coeff = &coeff[depth - 1];
-    kvz_alloc_lcu_cu(&work_tree[depth], state->encoder_control->log_scu_width);
-
-    // Copy top CU row.
-    if (y > 0) {
-      for (int i = 0; i < LCU_WIDTH; i += work_tree[0].scu_width) {
-        *LCU_GET_CU_AT_PX(&work_tree[depth], i, -1) =
-          *LCU_GET_CU_AT_PX(&work_tree[0], i, -1);
-      }
-    }
-    // Copy left CU column.
-    if (x > 0) {
-      for (int i = 0; i < LCU_WIDTH; i += work_tree[0].scu_width) {
-        *LCU_GET_CU_AT_PX(&work_tree[depth], -1, i) =
-          *LCU_GET_CU_AT_PX(&work_tree[0], -1, i);
-      }
-    }
-    // Copy top-left CU.
-    if (x > 0 && y > 0) {
-      *LCU_GET_CU_AT_PX(&work_tree[depth], -1, -1) =
-        *LCU_GET_CU_AT_PX(&work_tree[0], -1, -1);
-    }
-
-    // Copy top-right CU.
-    if (y > 0 && x + LCU_WIDTH < state->tile->frame->width) {
-      *LCU_GET_TOP_RIGHT_CU(&work_tree[depth]) =
-        *LCU_GET_TOP_RIGHT_CU(&work_tree[0]);
-    }
+    kvz_lcu_alloc_cu(&work_tree[depth], state->encoder_control->log_scu_width);
+    copy_ref_cus(&work_tree[0], &work_tree[depth]);
   }
 
   // Start search from depth 0.
@@ -958,6 +945,6 @@ void kvz_search_lcu(encoder_state_t * const state,
   copy_lcu_to_cu_data(state, x, y, &work_tree[0]);
 
   for (int depth = 0; depth <= MAX_PU_DEPTH; depth++) {
-    FREE_POINTER(work_tree[depth].cu);
+    kvz_lcu_free_cu(&work_tree[depth]);
   }
 }
