@@ -185,6 +185,19 @@ void kvz_cu_array_copy(cu_array_t* dst,       int dst_x, int dst_y,
 }
 
 /**
+ * \brief Allocate CU array for lcu_t.
+ */
+cu_info_t *kvz_alloc_lcu_cu(lcu_t *lcu, int log_scu_width)
+{
+  lcu->log_scu_width = log_scu_width;
+  lcu->scu_width = 1 << log_scu_width;
+  const int width = (LCU_WIDTH >> log_scu_width) + 1;
+  const size_t num_cu = width * width + 1;
+  lcu->cu = calloc(num_cu, sizeof(cu_info_t));
+  return lcu->cu;
+}
+
+/**
  * \brief Copy an lcu to a cu array.
  *
  * All values are in luma pixels.

@@ -26,11 +26,8 @@
 TEST test_get_spatial_merge_cand(void)
 {
   lcu_t lcu;
-  memset(&lcu, 0, sizeof(lcu));
-  lcu.log_scu_width = 2;
-  lcu.scu_width = 1 << lcu.log_scu_width;
-
-  for (int i = 0; i < sizeof(lcu.cu) / sizeof(cu_info_t); i++) {
+  kvz_alloc_lcu_cu(&lcu, 2);
+  for (int i = 0; i <= LCU_CU_STRIDE(&lcu) * LCU_CU_STRIDE(&lcu); i++) {
     lcu.cu[i].type = CU_INTER;
   }
 
@@ -48,17 +45,16 @@ TEST test_get_spatial_merge_cand(void)
   ASSERT_EQ(cand.a[0], &lcu.cu[127]);
   ASSERT_EQ(cand.a[1], &lcu.cu[110]);
 
+  FREE_POINTER(lcu.cu);
+
   PASS();
 }
 
 TEST test_get_spatial_merge_cand_8x8_scu(void)
 {
   lcu_t lcu;
-  memset(&lcu, 0, sizeof(lcu));
-  lcu.log_scu_width = 3;
-  lcu.scu_width = 1 << lcu.log_scu_width;
-
-  for (int i = 0; i < sizeof(lcu.cu) / sizeof(cu_info_t); i++) {
+  kvz_alloc_lcu_cu(&lcu, 3);
+  for (int i = 0; i <= LCU_CU_STRIDE(&lcu) * LCU_CU_STRIDE(&lcu); i++) {
     lcu.cu[i].type = CU_INTER;
   }
 
@@ -75,6 +71,8 @@ TEST test_get_spatial_merge_cand_8x8_scu(void)
   ASSERT_EQ(cand.b[2], &lcu.cu[ 4]);
   ASSERT_EQ(cand.a[0], &lcu.cu[40]);
   ASSERT_EQ(cand.a[1], &lcu.cu[31]);
+
+  FREE_POINTER(lcu.cu);
 
   PASS();
 }

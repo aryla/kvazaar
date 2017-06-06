@@ -468,9 +468,11 @@ static double search_cu(encoder_state_t * const state, int x, int y, int depth, 
         SIZE_nLx2N, SIZE_nRx2N,
       };
 
-      const int first_mode = ctrl->cfg.smp_enable ? 0 : 2;
-      const int last_mode  = (ctrl->cfg.amp_enable && cu_width >= 16) ? 5 : 1;
-      for (int i = first_mode; i <= last_mode; ++i) {
+      const bool smp_ok = ctrl->cfg.smp_enable &&
+                          LOG2_LCU_WIDTH - depth - 1 >= ctrl->log_scu_width;
+      const bool amp_ok = ctrl->cfg.amp_enable &&
+                          LOG2_LCU_WIDTH - depth - 2 >= ctrl->log_scu_width;
+      for (int i = (smp_ok ? 0 : 2); i <= (amp_ok ? 5 : 1); ++i) {
         kvz_search_cu_smp(state,
                           x, y,
                           depth,
@@ -816,8 +818,7 @@ static void init_ref_cus(const encoder_state_t * const state,
 
   FILL(*lcu, 0);
 
-  lcu->log_scu_width = state->encoder_control->log_scu_width;
-  lcu->scu_width = 1 << lcu->log_scu_width;
+  kvz_alloc_lcu_cu(lcu, state->encoder_control->log_scu_width);
 
   // Copy reference cu_info structs from neighbouring LCUs.
 
@@ -917,6 +918,33 @@ void kvz_search_lcu(encoder_state_t * const state,
   for (int depth = 1; depth <= MAX_PU_DEPTH; ++depth) {
     work_tree[depth] = work_tree[0];
     work_tree[depth].coeff = &coeff[depth - 1];
+    kvz_alloc_lcu_cu(&work_tree[depth], state->encoder_control->log_scu_width);
+
+    // Copy top CU row.
+    if (y > 0) {
+      for (int i = 0; i < LCU_WIDTH; i += work_tree[0].scu_width) {
+        *LCU_GET_CU_AT_PX(&work_tree[depth], i, -1) =
+          *LCU_GET_CU_AT_PX(&work_tree[0], i, -1);
+      }
+    }
+    // Copy left CU column.
+    if (x > 0) {
+      for (int i = 0; i < LCU_WIDTH; i += work_tree[0].scu_width) {
+        *LCU_GET_CU_AT_PX(&work_tree[depth], -1, i) =
+          *LCU_GET_CU_AT_PX(&work_tree[0], -1, i);
+      }
+    }
+    // Copy top-left CU.
+    if (x > 0 && y > 0) {
+      *LCU_GET_CU_AT_PX(&work_tree[depth], -1, -1) =
+        *LCU_GET_CU_AT_PX(&work_tree[0], -1, -1);
+    }
+
+    // Copy top-right CU.
+    if (y > 0 && x + LCU_WIDTH < state->tile->frame->width) {
+      *LCU_GET_TOP_RIGHT_CU(&work_tree[depth]) =
+        *LCU_GET_TOP_RIGHT_CU(&work_tree[0]);
+    }
   }
 
   // Start search from depth 0.
@@ -928,4 +956,8 @@ void kvz_search_lcu(encoder_state_t * const state,
   // The best decisions through out the LCU got propagated back to depth 0,
   // so copy those back to the frame.
   copy_lcu_to_cu_data(state, x, y, &work_tree[0]);
+
+  for (int depth = 0; depth <= MAX_PU_DEPTH; depth++) {
+    FREE_POINTER(work_tree[depth].cu);
+  }
 }

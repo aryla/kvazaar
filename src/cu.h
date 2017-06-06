@@ -334,9 +334,11 @@ typedef struct {
 
    \endverbatim
    */
-  cu_info_t cu[17 * 17 + 1];
+  cu_info_t *cu;
 
 } lcu_t;
+
+cu_info_t *kvz_alloc_lcu_cu(lcu_t *lcu, int log_scu_width);
 
 void kvz_cu_array_copy_from_lcu(cu_array_t* dst, int dst_x, int dst_y, const lcu_t *src);
 
