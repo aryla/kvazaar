@@ -678,6 +678,8 @@ static void get_temporal_merge_candidates(const encoder_state_t * const state,
             |H|
   */
 
+  const int scu_width = 1 << state->encoder_control->log_scu_width;
+
   cand_out->c3 = cand_out->h = NULL;
 
   // Find temporal reference
@@ -695,7 +697,7 @@ static void get_temporal_merge_candidates(const encoder_state_t * const state,
     if (colocated_ref == UINT_MAX) return;
 
     cu_array_t *ref_cu_array = state->frame->ref->cu_arrays[colocated_ref];
-    int cu_per_width = ref_cu_array->width / SCU_WIDTH;
+    int cu_per_width = ref_cu_array->width / scu_width;
 
     uint32_t xColBr = x + width;
     uint32_t yColBr = y + height;
@@ -707,8 +709,8 @@ static void get_temporal_merge_candidates(const encoder_state_t * const state,
 
       // Y inside the current CTU / LCU
       if (yColBr % LCU_WIDTH != 0) {
-        H_offset = ((xColBr >> 4) << 4) / SCU_WIDTH +
-                  (((yColBr >> 4) << 4) / SCU_WIDTH) * cu_per_width;
+        H_offset = ((xColBr >> 4) << 4) / scu_width +
+                  (((yColBr >> 4) << 4) / scu_width) * cu_per_width;
       }
 
       if (H_offset >= 0) {
@@ -723,7 +725,7 @@ static void get_temporal_merge_candidates(const encoder_state_t * const state,
 
     // C3 must be inside the LCU, in the center position of current CU
     if (xColCtr < state->encoder_control->in.width && yColCtr < state->encoder_control->in.height) {
-      uint32_t C3_offset = ((xColCtr >> 4) << 4) / SCU_WIDTH + ((((yColCtr >> 4) << 4) / SCU_WIDTH) * cu_per_width);
+      uint32_t C3_offset = ((xColCtr >> 4) << 4) / scu_width + ((((yColCtr >> 4) << 4) / scu_width) * cu_per_width);
       if (ref_cu_array->data[C3_offset].type == CU_INTER) {
         cand_out->c3 = &ref_cu_array->data[C3_offset];
       }

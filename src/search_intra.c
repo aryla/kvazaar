@@ -807,10 +807,10 @@ void kvz_search_cu_intra(encoder_state_t * const state,
 
   // Select left and top CUs if they are available.
   // Top CU is not available across LCU boundary.
-  if (x_px >= SCU_WIDTH) {
+  if (x_px >= lcu->scu_width) {
     left_cu = LCU_GET_CU_AT_PX(lcu, lcu_px.x - 1, lcu_px.y);
   }
-  if (y_px >= SCU_WIDTH && lcu_px.y > 0) {
+  if (y_px >= lcu->scu_width && lcu_px.y > 0) {
     above_cu = LCU_GET_CU_AT_PX(lcu, lcu_px.x, lcu_px.y - 1);
   }
   kvz_intra_get_dir_luma_predictor(x_px, y_px, candidate_modes, cur_cu, left_cu, above_cu);

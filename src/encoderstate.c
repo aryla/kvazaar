@@ -223,6 +223,7 @@ static bool set_cu_qps(encoder_state_t *state, int x, int y, int depth, bool coe
     coeffs_coded = true;
   }
 
+  const int scu_width = 1 << state->encoder_control->log_scu_width;
   cu_info_t *cu = kvz_cu_array_at(state->tile->frame->cu_array, x, y);
   const int cu_width = LCU_WIDTH >> depth;
   coeffs_coded = coeffs_coded || cbf_is_set_any(cu->cbf, cu->depth);
@@ -254,8 +255,8 @@ static bool set_cu_qps(encoder_state_t *state, int x, int y, int depth, bool coe
     // the area covered by the CU.
     const int8_t qp = coeffs_coded ? state->qp : state->ref_qp;
 
-    for (int y_scu = y; y_scu < y + cu_width; y_scu += SCU_WIDTH) {
-      for (int x_scu = x; x_scu < x + cu_width; x_scu += SCU_WIDTH) {
+    for (int y_scu = y; y_scu < y + cu_width; y_scu += scu_width) {
+      for (int x_scu = x; x_scu < x + cu_width; x_scu += scu_width) {
         kvz_cu_array_at(state->tile->frame->cu_array, x_scu, y_scu)->qp = qp;
       }
     }
@@ -1134,7 +1135,7 @@ void kvz_encoder_prepare(encoder_state_t *state)
     state->tile->frame->cu_array = NULL;
     unsigned width  = state->tile->frame->width_in_lcu  * LCU_WIDTH;
     unsigned height = state->tile->frame->height_in_lcu * LCU_WIDTH;
-    state->tile->frame->cu_array = kvz_cu_array_alloc(width, height);
+    state->tile->frame->cu_array = kvz_cu_array_alloc(width, height, encoder->log_scu_width);
 
     kvz_image_list_copy_contents(state->frame->ref, prev_state->frame->ref);
   }
@@ -1154,7 +1155,7 @@ void kvz_encoder_prepare(encoder_state_t *state)
     kvz_cu_array_free(state->tile->frame->cu_array);
     unsigned height = state->tile->frame->height_in_lcu * LCU_WIDTH;
     unsigned width  = state->tile->frame->width_in_lcu  * LCU_WIDTH;
-    state->tile->frame->cu_array = kvz_cu_array_alloc(width, height);
+    state->tile->frame->cu_array = kvz_cu_array_alloc(width, height, encoder->log_scu_width);
   }
 
   // Remove source and reconstructed picture.

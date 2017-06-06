@@ -33,6 +33,7 @@
  */
 videoframe_t * kvz_videoframe_alloc(int32_t width,
                                     int32_t height,
+                                    int32_t log_scu_width,
                                     enum kvz_chroma_format chroma_format)
 {
   videoframe_t *frame = MALLOC(videoframe_t, 1);
@@ -51,7 +52,7 @@ videoframe_t * kvz_videoframe_alloc(int32_t width,
   {
     unsigned cu_array_width  = frame->width_in_lcu  * LCU_WIDTH;
     unsigned cu_array_height = frame->height_in_lcu * LCU_WIDTH;
-    frame->cu_array = kvz_cu_array_alloc(cu_array_width, cu_array_height);
+    frame->cu_array = kvz_cu_array_alloc(cu_array_width, cu_array_height, log_scu_width);
   }
 
   frame->sao_luma = MALLOC(sao_info_t, frame->width_in_lcu * frame->height_in_lcu);

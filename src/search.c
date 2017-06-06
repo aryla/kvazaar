@@ -60,8 +60,8 @@
 
 static INLINE void copy_cu_info(int x_local, int y_local, int width, lcu_t *from, lcu_t *to)
 {
-  for   (int y = y_local; y < y_local + width; y += SCU_WIDTH) {
-    for (int x = x_local; x < x_local + width; x += SCU_WIDTH) {
+  for   (int y = y_local; y < y_local + width; y += to->scu_width) {
+    for (int x = x_local; x < x_local + width; x += to->scu_width) {
       *LCU_GET_CU_AT_PX(to, x, y) = *LCU_GET_CU_AT_PX(from, x, y);
     }
   }
@@ -124,8 +124,8 @@ void kvz_lcu_set_trdepth(lcu_t *lcu, int x_px, int y_px, int depth, int tr_depth
   const int y_local = SUB_SCU(y_px);
   const int width = LCU_WIDTH >> depth;
 
-  for (unsigned y = 0; y < width; y += SCU_WIDTH) {
-    for (unsigned x = 0; x < width; x += SCU_WIDTH) {
+  for (unsigned y = 0; y < width; y += lcu->scu_width) {
+    for (unsigned x = 0; x < width; x += lcu->scu_width) {
       LCU_GET_CU_AT_PX(lcu, x_local + x, y_local + y)->tr_depth = tr_depth;
     }
   }
@@ -134,8 +134,8 @@ void kvz_lcu_set_trdepth(lcu_t *lcu, int x_px, int y_px, int depth, int tr_depth
 static void lcu_fill_cu_info(lcu_t *lcu, int x_local, int y_local, int width, int height, cu_info_t *cu)
 {
   // Set mode in every CU covered by part_mode in this depth.
-  for (int y = y_local; y < y_local + height; y += SCU_WIDTH) {
-    for (int x = x_local; x < x_local + width; x += SCU_WIDTH) {
+  for (int y = y_local; y < y_local + height; y += lcu->scu_width) {
+    for (int x = x_local; x < x_local + width; x += lcu->scu_width) {
       cu_info_t *to = LCU_GET_CU_AT_PX(lcu, x, y);
       to->type      = cu->type;
       to->depth     = cu->depth;
@@ -177,8 +177,8 @@ static void lcu_set_coeff(lcu_t *lcu, int x_local, int y_local, int width, cu_in
   const uint32_t mask = ~((width >> tr_split)-1);
 
   // Set coeff flags in every CU covered by part_mode in this depth.
-  for (uint32_t y = y_local; y < y_local + width; y += SCU_WIDTH) {
-    for (uint32_t x = x_local; x < x_local + width; x += SCU_WIDTH) {
+  for (uint32_t y = y_local; y < y_local + width; y += lcu->scu_width) {
+    for (uint32_t x = x_local; x < x_local + width; x += lcu->scu_width) {
       // Use TU top-left CU to propagate coeff flags
       cu_info_t *cu_from = LCU_GET_CU_AT_PX(lcu, x & mask, y & mask);
       cu_info_t *cu_to   = LCU_GET_CU_AT_PX(lcu, x, y);
@@ -358,8 +358,16 @@ static double calc_mode_bits(const encoder_state_t *state,
 
   int8_t candidate_modes[3];
   {
-    const cu_info_t *left_cu  = ((x >= SCU_WIDTH) ? LCU_GET_CU_AT_PX(lcu, x_local - SCU_WIDTH, y_local) : NULL);
-    const cu_info_t *above_cu = ((y >= SCU_WIDTH) ? LCU_GET_CU_AT_PX(lcu, x_local, y_local - SCU_WIDTH) : NULL);
+    const cu_info_t *left_cu  = NULL;
+    const cu_info_t *above_cu = NULL;
+
+    if (x >= lcu->scu_width) {
+      left_cu = LCU_GET_CU_AT_PX(lcu, x_local - lcu->scu_width, y_local);
+    }
+    if (y >= lcu->scu_width) {
+      above_cu = LCU_GET_CU_AT_PX(lcu, x_local, y_local - lcu->scu_width);
+    }
+
     kvz_intra_get_dir_luma_predictor(x, y, candidate_modes, cur_cu, left_cu, above_cu);
   }
 
@@ -808,9 +816,14 @@ static void init_ref_cus(const encoder_state_t * const state,
 
   FILL(*lcu, 0);
 
+  lcu->log_scu_width = state->encoder_control->log_scu_width;
+  lcu->scu_width = 1 << lcu->log_scu_width;
+
+  // Copy reference cu_info structs from neighbouring LCUs.
+
   // Copy top CU row.
   if (y > 0) {
-    for (int i = 0; i < LCU_WIDTH; i += SCU_WIDTH) {
+    for (int i = 0; i < LCU_WIDTH; i += lcu->scu_width) {
       const cu_info_t *from_cu = kvz_cu_array_at_const(frame->cu_array, x + i, y - 1);
       cu_info_t *to_cu = LCU_GET_CU_AT_PX(lcu, i, -1);
       memcpy(to_cu, from_cu, sizeof(*to_cu));
@@ -818,7 +831,7 @@ static void init_ref_cus(const encoder_state_t * const state,
   }
   // Copy left CU column.
   if (x > 0) {
-    for (int i = 0; i < LCU_WIDTH; i += SCU_WIDTH) {
+    for (int i = 0; i < LCU_WIDTH; i += lcu->scu_width) {
       const cu_info_t *from_cu = kvz_cu_array_at_const(frame->cu_array, x - 1, y + i);
       cu_info_t *to_cu = LCU_GET_CU_AT_PX(lcu, -1, i);
       memcpy(to_cu, from_cu, sizeof(*to_cu));

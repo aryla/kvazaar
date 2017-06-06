@@ -183,12 +183,13 @@ typedef struct
 
 typedef struct {
   cu_info_t *data; //!< \brief cu array
+  int32_t log_scu_width; //!< \brief base-2 log of width of area covered by a cu_info_t
   int32_t width;    //!< \brief width of the array in pixels
   int32_t height;   //!< \brief height of the array in pixels
   int32_t refcount; //!< \brief number of references to this cu_array
 } cu_array_t;
 
-cu_array_t * kvz_cu_array_alloc(int width, int height);
+cu_array_t * kvz_cu_array_alloc(int width, int height, int log_scu_width);
 int kvz_cu_array_free(cu_array_t *cua);
 cu_info_t* kvz_cu_array_at(cu_array_t *cua, unsigned x_px, unsigned y_px);
 const cu_info_t* kvz_cu_array_at_const(const cu_array_t *cua, unsigned x_px, unsigned y_px);
@@ -204,11 +205,6 @@ void kvz_cu_array_copy(cu_array_t* dst,       int dst_x, int dst_y,
  * of the containing LCU.
  */
 #define SUB_SCU(xy) ((xy) & (LCU_WIDTH - 1))
-
-#define LCU_CU_WIDTH 16
-#define LCU_T_CU_WIDTH (LCU_CU_WIDTH + 1)
-#define LCU_CU_OFFSET (LCU_T_CU_WIDTH + 1)
-#define SCU_WIDTH (LCU_WIDTH / LCU_CU_WIDTH)
 
 // Width from top left of the LCU, so +1 for ref buffer size.
 #define LCU_REF_PX_WIDTH (LCU_WIDTH + LCU_WIDTH / 2)
@@ -293,13 +289,34 @@ typedef struct {
   lcu_coeff_t *coeff; //!< LCU coefficients
 
   /**
-   * A 17x17 CU array, plus the top right reference CU.
-   * - Top reference CUs at indices [0,16] (row 0).
-   * - Left reference CUs at indices 17*n where n is in [0,16] (column 0).
-   * - All CUs of this LCU at indices 17*y + x where x,y are in [1,16].
-   * - Top right reference CU at the last index.
+   * \brief Width of the area covered by a single cu_info_t in luma pixels.
+   */
+  int scu_width;
+
+  /**
+   * \brief Base-2 logarithm of scu_width.
+   */
+  int log_scu_width;
+
+  /**
+   * \brief CU array
    *
-   * The figure below shows how the indices map to CU locations.
+   * The size of the array depends on scu_width.
+   *
+   * For scu_width == 4:
+   * - Top reference CUs at indices [0,16] (row 0).
+   * - Left reference CUs at indices 17n or where n is in [0,16] (column 0).
+   * - All CUs of this LCU at indices 17y + x where x,y are in [1,16].
+   * - Top right reference CU at the last index (289).
+   *
+   * For scu_width == 8:
+   * - Top reference CUs at indices [0,8] (row 0).
+   * - Left reference CUs at indices 9n or where n is in [0,8] (column 0).
+   * - All CUs of this LCU at indices 9y + x where x,y are in [1,8].
+   * - Top right reference CU at the last index (81).
+   *
+   * The figure below shows how the indices map to CU locations when
+   * scu_width is equal to 4.
    *
    \verbatim
 
@@ -317,16 +334,20 @@ typedef struct {
 
    \endverbatim
    */
-  cu_info_t cu[LCU_T_CU_WIDTH * LCU_T_CU_WIDTH + 1];
+  cu_info_t cu[17 * 17 + 1];
+
 } lcu_t;
 
 void kvz_cu_array_copy_from_lcu(cu_array_t* dst, int dst_x, int dst_y, const lcu_t *src);
+
+
+#define LCU_CU_STRIDE(lcu) ((LCU_WIDTH >> (lcu)->log_scu_width) + 1)
 
 /**
  * \brief Return pointer to the top right reference CU.
  */
 #define LCU_GET_TOP_RIGHT_CU(lcu) \
-  (&(lcu)->cu[LCU_T_CU_WIDTH * LCU_T_CU_WIDTH])
+  (&(lcu)->cu[LCU_CU_STRIDE(lcu) * LCU_CU_STRIDE(lcu)])
 
 /**
  * \brief Return pointer to the CU containing a given pixel.
@@ -337,7 +358,9 @@ void kvz_cu_array_copy_from_lcu(cu_array_t* dst, int dst_x, int dst_y, const lcu
  * \return      pointer to the CU at coordinates (x_px, y_px)
  */
 #define LCU_GET_CU_AT_PX(lcu, x_px, y_px) \
-  (&(lcu)->cu[LCU_CU_OFFSET + ((x_px) >> 2) + ((y_px) >> 2) * LCU_T_CU_WIDTH])
+  (&(lcu)->cu[LCU_CU_STRIDE(lcu) + 1 + \
+              ((x_px) >> (lcu)->log_scu_width) + \
+              ((y_px) >> (lcu)->log_scu_width) * LCU_CU_STRIDE(lcu)])
 
 
 /**

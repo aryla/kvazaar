@@ -271,6 +271,14 @@ encoder_control_t* kvz_encoder_control_init(const kvz_config *const cfg)
 
   encoder->chroma_format = KVZ_FORMAT2CSP(encoder->cfg.input_format);
 
+  encoder->log_scu_width = 3;
+  if (encoder->cfg.pu_depth_intra.max + encoder->cfg.tr_depth_intra >= 4 ||
+      (encoder->cfg.pu_depth_inter.max >= 3 && encoder->cfg.smp_enable) ||
+      (encoder->cfg.pu_depth_inter.max >= 2 && encoder->cfg.amp_enable))
+  {
+    encoder->log_scu_width = 2;
+  }
+
   // Interlacing
   encoder->in.source_scan_type = (int8_t)encoder->cfg.source_scan_type;
   encoder->vui.field_seq_flag = encoder->cfg.source_scan_type != 0;

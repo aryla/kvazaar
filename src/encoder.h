@@ -125,6 +125,10 @@ typedef struct encoder_control_t
     uint8_t dependent_slice_segments_enabled_flag;
   } pps;
 
+  /**
+   * \brief Base-2 logarithm of the width of the area covered by a cu_info_t.
+   */
+  int log_scu_width;
 } encoder_control_t;
 
 encoder_control_t* kvz_encoder_control_init(const kvz_config *cfg);

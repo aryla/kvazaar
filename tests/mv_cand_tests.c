@@ -27,6 +27,9 @@ TEST test_get_spatial_merge_cand(void)
 {
   lcu_t lcu;
   memset(&lcu, 0, sizeof(lcu));
+  lcu.log_scu_width = 2;
+  lcu.scu_width = 1 << lcu.log_scu_width;
+
   for (int i = 0; i < sizeof(lcu.cu) / sizeof(cu_info_t); i++) {
     lcu.cu[i].type = CU_INTER;
   }
@@ -44,6 +47,34 @@ TEST test_get_spatial_merge_cand(void)
   ASSERT_EQ(cand.b[2], &lcu.cu[  8]);
   ASSERT_EQ(cand.a[0], &lcu.cu[127]);
   ASSERT_EQ(cand.a[1], &lcu.cu[110]);
+
+  PASS();
+}
+
+TEST test_get_spatial_merge_cand_8x8_scu(void)
+{
+  lcu_t lcu;
+  memset(&lcu, 0, sizeof(lcu));
+  lcu.log_scu_width = 3;
+  lcu.scu_width = 1 << lcu.log_scu_width;
+
+  for (int i = 0; i < sizeof(lcu.cu) / sizeof(cu_info_t); i++) {
+    lcu.cu[i].type = CU_INTER;
+  }
+
+  merge_candidates_t cand = { {0, 0}, {0, 0, 0}, 0, 0 };
+
+  get_spatial_merge_candidates(64 + 32, 64, // x, y
+                               32, 24,      // width, height
+                               1920, 1080,  // picture size
+                               &lcu,
+                               &cand);
+
+  ASSERT_EQ(cand.b[0], &lcu.cu[81]);
+  ASSERT_EQ(cand.b[1], &lcu.cu[ 8]);
+  ASSERT_EQ(cand.b[2], &lcu.cu[ 4]);
+  ASSERT_EQ(cand.a[0], &lcu.cu[40]);
+  ASSERT_EQ(cand.a[1], &lcu.cu[31]);
 
   PASS();
 }
@@ -214,6 +245,7 @@ TEST test_is_b0_cand_coded()
 
 SUITE(mv_cand_tests) {
   RUN_TEST(test_get_spatial_merge_cand);
+  RUN_TEST(test_get_spatial_merge_cand_8x8_scu);
   RUN_TEST(test_is_a0_cand_coded);
   RUN_TEST(test_is_b0_cand_coded);
 }
